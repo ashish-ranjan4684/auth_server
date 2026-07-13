@@ -78,6 +78,7 @@ async function login(call,callback){
             let currTimestamp = Date.now();
             let token = {id:foundUser.id, name:foundUser.name, organization:foundUser.organization, expAt: currTimestamp+(1000*60*60*24*7), iat:currTimestamp};
             let sign = crypto.sign(null,JSON.stringify(token),key).toString("base64url");
+            console.log(`${Buffer.from(JSON.stringify(token)).toString("base64url")}.${sign}`)
             callback(null,{
                 token:`${Buffer.from(JSON.stringify(token)).toString("base64url")}.${sign}`,
                 status:grpc.status.OK
