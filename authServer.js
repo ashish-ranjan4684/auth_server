@@ -63,7 +63,7 @@ async function login(call,callback){
             });
         }
         let foundUser = user[0];
-        console.log("some user found");
+        console.log("some user found", foundUser);
         let hashedPassword = crypto.argon2Sync("argon2id",{
             message:password,
             nonce:Buffer.from(foundUser.salt,"hex"),
@@ -74,6 +74,7 @@ async function login(call,callback){
         }).toString("hex");
         if(hashedPassword === foundUser.password_hash){
             console.log("user found");
+            console.log(hashedPassword,foundUser.password_hash)
             //send token containing name, organization and id using edDsa over hash of token
             let currTimestamp = Date.now();
             let token = {id:foundUser.id, name:foundUser.name, organization:foundUser.organization, expAt: currTimestamp+(1000*60*60*24*7), iat:currTimestamp};
