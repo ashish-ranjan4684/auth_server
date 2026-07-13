@@ -63,10 +63,11 @@ async function login(call,callback){
             });
         }
         let foundUser = user[0];
+        console.log("some user found");
         let hashedPassword = crypto.argon2Sync("argon2id",{
             message:password,
             nonce:Buffer.from(foundUser.salt,"hex"),
-            parallelism:2,
+            parallelism:1,
             tagLength:64,
             memory:65536,
             passes:3
