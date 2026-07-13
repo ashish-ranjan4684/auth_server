@@ -67,7 +67,7 @@ async function login(call,callback){
         let hashedPassword = crypto.argon2Sync("argon2id",{
             message:password,
             nonce:Buffer.from(foundUser.salt,"hex"),
-            parallelism:1,
+            parallelism:2,
             tagLength:64,
             memory:65536,
             passes:3
