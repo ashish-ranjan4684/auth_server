@@ -1,29 +1,108 @@
-syntax="proto3";
+syntax = "proto3";
 
 package auth;
 
-message LoginRequest{
-    string email=1;
-    string password=2;
+// -------------------- Login --------------------
+
+message LoginRequest {
+    string email = 1;
+    string password = 2;
 }
 
-message LoginResponse{
+message LoginResponse {
     int32 status = 1;
     string token = 2;
 }
 
-message SignupRequest{
-    string name=1;
-    string email=2;
-    string organization=3;
-    string password=4;
+// -------------------- Signup --------------------
+
+message SignupRequest {
+    string name = 1;
+    string email = 2;
+    string organization = 3;
+    string password = 4;
 }
 
-message SignupResponse{
+message SignupResponse {
     int32 status = 1;
 }
 
-service AuthService{
-    rpc Login(LoginRequest) returns (LoginResponse);
-    rpc Signup(SignupRequest) returns (SignupResponse);
+// -------------------- Check User --------------------
+
+message CheckUserRequest {
+    string email = 1;
+}
+
+message CheckUserResponse {
+    int32 status = 1;
+    string id = 2;
+}
+
+// -------------------- Delete User --------------------
+
+message DeleteUserRequest {
+    string email = 1;
+}
+
+message DeleteUserResponse {
+    int32 status = 1;
+    string message = 2;
+}
+
+// -------------------- Forgot Password --------------------
+
+message SetResetPasswordTokenRequest {
+    string email = 1;
+}
+
+message SetResetPasswordTokenResponse {
+    int32 status = 1;
+    string token = 2;
+}
+
+// -------------------- Reset Password --------------------
+
+message ResetPasswordRequest {
+    string token = 1;
+    string password = 2;
+}
+
+message ResetPasswordResponse {
+    int32 status = 1;
+    string message = 2;
+}
+
+// -------------------- Rotate Signing Key --------------------
+
+message RotateKeyRequest {
+    bytes privateKey = 1;
+}
+
+message RotateKeyResponse {
+    int32 status = 1;
+    string message = 2;
+}
+
+// -------------------- Service --------------------
+
+service AuthService {
+
+    rpc Login(LoginRequest)
+        returns (LoginResponse);
+
+    rpc Signup(SignupRequest)
+        returns (SignupResponse);
+
+    rpc CheckUser(CheckUserRequest)
+        returns (CheckUserResponse);
+
+    rpc DeleteUser(DeleteUserRequest)
+        returns (DeleteUserResponse);
+
+    rpc SetResetPasswordToken(SetResetPasswordTokenRequest)
+        returns (SetResetPasswordTokenResponse);
+
+    rpc ResetPassword(ResetPasswordRequest)
+        returns (ResetPasswordResponse);
+
 }

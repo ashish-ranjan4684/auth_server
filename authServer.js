@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
 const mysql = require("mysql2/promise");
+const {createClient} = require("redis");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
@@ -21,6 +22,27 @@ let pool = mysql.createPool({
     queueLimit:0,//unlimited queue length for pending requests
     enableKeepAlive:true//prevent connection timeout ie., even if no request is sent, the connection will stay alive
 });
+
+let redisClient = createClient({
+    socket:{
+        host:process.env.REDIS_HOST,
+        port:process.env.REDIS_PORT
+    },
+    username:process.env.REDIS_USER,
+    password:process.env.REDIS_PASSWORD
+});
+
+(async()=>{
+    redisClient.on("error",()=>{
+        console.log("An error occurred.");
+    });
+    try{
+        await redisClient.connect();
+        console.log("Connected to redis.")
+    }catch(err){
+        console.log("An error occurred while connecting to error.")
+    }
+})();
 
 const key = crypto.createPrivateKey({
     key: fs.readFileSync(path.join(__dirname,"private_key_files","privateKey.pem")),
@@ -145,10 +167,163 @@ async function signup(call, callback){
 
 }
 
+async function checkUser(call, callback){
+    let email = call.request.email;
+    if(!email){
+        return callback({
+            code:grpc.status.INVALID_ARGUMENT,
+            message: "Email is not provided."
+        },null);
+    }
+    let query = "SELECT id FROM users WHERE email = ?";
+    try{
+        let [user] = await pool.execute(query,[email]);
+        if(user.length === 0){
+            return callback({
+                code:grpc.status.NOT_FOUND,
+                message:"User does not exist."
+            },null);
+        }else{
+            return callback(null,{
+                status:grpc.status.OK,
+                id:user[0].id
+            });
+        }
+    }catch(err){
+        return callback({
+            code:grpc.status.INTERNAL,
+            message:"Internal server error."
+        }, null)
+    }
+
+}
+
+async function deleteUser(call, callback){
+    let email = call.request.email;
+    if(!email){
+        return callback({
+            code: grpc.status.INVALID_ARGUMENT,
+            message:"Email not provided."
+        },null);
+    }
+    let query = "DELETE FROM users WHERE email = ?";
+    try{
+        let [result] = await pool.execute(query,[email]);
+
+        if(result.affectedRows === 0){
+            return callback({
+                code:grpc.status.NOT_FOUND,
+                message:"User not found."
+            }, null);
+        }else{
+            return callback(null,{
+                status:grpc.status.OK,
+                message:"User deleted successfully."
+            });
+        }
+    }catch(err){
+        return callback({
+            code:grpc.status.INTERNAL,
+            message:"Internal server error."
+        },null);
+    } 
+}
+
+async function setResetPasswordToken(call, callback){
+    let email = call.request.email;
+    console.log(email);
+
+    if(!email){
+        return callback({
+            code:grpc.status.INVALID_ARGUMENT,
+            message:"Email not provided."
+        }, null);
+    }
+
+    let query = "SELECT * FROM users WHERE email = ?";
+    try{
+        let [user] = await pool.execute(query,[email]);
+        let resetToken = null;
+        if(user.length > 0){
+            resetToken = crypto.randomBytes(32).toString("base64url");
+            await redisClient.setEx(`auth:resetpass:token:${resetToken}`,60*60,user[0].id);
+        }
+        console.log(resetToken);
+        return callback(null,{
+            status:grpc.status.OK,
+            token:resetToken
+        });
+        
+    }catch(err){
+        console.log("error.");
+        return callback({
+            code:grpc.status.INTERNAL,
+            message:"Internal server error"
+        },null);
+    }
+
+}
+
+async function resetPassword(call,callback){
+    
+    let token = call.request.token;
+    let password = call.request.password;
+    if(!token){
+        return callback({
+            code:grpc.status.INVALID_ARGUMENT,
+            message:"Token not provided."
+        },null);
+    }
+
+    try{
+        let userId = await redisClient.getDel(`auth:resetpass:token:${token}`);
+        if(!userId){
+            return callback({
+                code:grpc.status.DEADLINE_EXCEEDED,
+                message:"Token does not exist or got expired."
+            },null)
+        }
+        const salt = crypto.randomBytes(64);
+        const passwordHash = crypto.argon2Sync("argon2id",{
+            message: password,
+            nonce:salt,
+            parallelism:2,
+            tagLength:64,
+            memory:65536,
+            passes:3
+        }).toString("hex");
+
+        let [result] = await pool.execute("UPDATE users SET password_hash = ?, salt = ? WHERE id = ?",[passwordHash, salt.toString("hex"), userId]);
+        if(result.affectedRows === 0){
+            return callback({
+                code:grpc.status.NOT_FOUND,
+                message:"User does not exist."
+            },null);
+        }else{
+            return callback(null,{
+                status: grpc.status.OK,
+                message:"Password changed successfully."
+            });
+        }
+        
+    }catch(err){
+        return callback({
+            code:grpc.status.INTERNAL,
+            message:"Internal server error."
+        },null);
+    }
+    
+
+}
+
 const server = new grpc.Server();
 server.addService(proto.AuthService.service,{
     Login: login,
-    Signup: signup
+    Signup: signup,
+    CheckUser: checkUser,
+    DeleteUser: deleteUser,
+    SetResetPasswordToken: setResetPasswordToken,
+    ResetPassword: resetPassword,
 });
 
 const HOST = process.env.PRODUCTION==="true"?process.env.AUTH_SERVER_HOST:"0.0.0.0";
